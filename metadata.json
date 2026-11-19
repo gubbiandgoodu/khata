@@ -1,0 +1,6 @@
+{
+  "name": "Khata",
+  "description": "Minimalist cash and UPI expense and income ledger with categories, statistics, and backups.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

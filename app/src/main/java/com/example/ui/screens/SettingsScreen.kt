@@ -31,10 +31,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Contrast
 import androidx.compose.material.icons.filled.CurrencyRupee
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Edit
@@ -44,6 +48,7 @@ import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderShared
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Person
@@ -51,6 +56,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.SettingsBrightness
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Today
@@ -96,8 +102,11 @@ import com.example.data.model.ExpenseCategory
 import com.example.data.model.PaymentMode
 import com.example.ui.theme.AppCurrency
 import com.example.ui.theme.AppThemeColor
+import com.example.ui.theme.AppThemeMode
 import com.example.ui.theme.CashGreenAccent
 import com.example.ui.theme.DangerRed
+import com.example.ui.theme.ExpenseRed
+import com.example.ui.theme.IncomeGreen
 import com.example.ui.theme.UpiIndigoAccent
 import com.example.ui.viewmodel.ExpenseUiState
 import com.example.ui.viewmodel.ExpenseViewModel
@@ -117,10 +126,11 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val selectedThemeColor by viewModel.selectedThemeColor.collectAsStateWithLifecycle()
+    val selectedThemeMode by viewModel.selectedThemeMode.collectAsStateWithLifecycle()
     val defaultCategoryId by viewModel.defaultCategoryId.collectAsStateWithLifecycle()
+    val defaultIncomeCategoryId by viewModel.defaultIncomeCategoryId.collectAsStateWithLifecycle()
     val categories by viewModel.categories.collectAsStateWithLifecycle()
-    val defaultCategory = categories.firstOrNull { it.id == defaultCategoryId }
-        ?: CategoryRegistry.getCategory(context, defaultCategoryId)
+    val incomeCategories by viewModel.incomeCategories.collectAsStateWithLifecycle()
 
     val lastBackupTime by viewModel.lastBackupTime.collectAsStateWithLifecycle()
     val isBackupInProgress by viewModel.isBackupInProgress.collectAsStateWithLifecycle()
@@ -137,10 +147,12 @@ fun SettingsScreen(
 
     var showClearConfirmation by remember { mutableStateOf(false) }
     var showCategoriesModal by remember { mutableStateOf(false) }
+    var managingIncomeCategories by remember { mutableStateOf(false) }
     var showAddCategoryModal by remember { mutableStateOf(false) }
     var showPaymentModesModal by remember { mutableStateOf(false) }
     var showAddPaymentModeModal by remember { mutableStateOf(false) }
     var showCurrencyModal by remember { mutableStateOf(false) }
+    var showThemeModeModal by remember { mutableStateOf(false) }
     var showThemeColorModal by remember { mutableStateOf(false) }
     var showRestoreSuccessDialog by remember { mutableStateOf<String?>(null) }
 
@@ -582,11 +594,52 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.surface
                 ) {
                     Column(modifier = Modifier.padding(vertical = 6.dp)) {
+                        // App Theme (Light / Dark / Black / System Default)
+                        val themeModeIcon = when (selectedThemeMode) {
+                            AppThemeMode.LIGHT -> Icons.Default.LightMode
+                            AppThemeMode.DARK -> Icons.Default.DarkMode
+                            AppThemeMode.BLACK -> Icons.Default.Contrast
+                            AppThemeMode.SYSTEM -> Icons.Default.SettingsBrightness
+                        }
+                        SettingsOptionRow(
+                            icon = themeModeIcon,
+                            iconTint = MaterialTheme.colorScheme.primary,
+                            title = "App Theme",
+                            subtitle = "${selectedThemeMode.displayName} • ${selectedThemeMode.description}",
+                            trailingContent = {
+                                val swatchColor = when (selectedThemeMode) {
+                                    AppThemeMode.LIGHT -> Color(0xFFF8FAFC)
+                                    AppThemeMode.DARK -> Color(0xFF0F172A)
+                                    AppThemeMode.BLACK -> Color(0xFF000000)
+                                    AppThemeMode.SYSTEM -> MaterialTheme.colorScheme.surfaceVariant
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .clip(CircleShape)
+                                        .background(swatchColor)
+                                        .border(1.5.dp, MaterialTheme.colorScheme.outline, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (selectedThemeMode == AppThemeMode.SYSTEM) {
+                                        Icon(
+                                            imageVector = Icons.Default.SettingsBrightness,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
+                            },
+                            onClick = { showThemeModeModal = true },
+                            modifier = Modifier.testTag("settings_theme_mode_row")
+                        )
+
                         // Theme Color picker option
                         SettingsOptionRow(
                             icon = Icons.Default.Palette,
                             iconTint = selectedThemeColor.primaryColor,
-                            title = "Theme Color",
+                            title = "Accent Color",
                             subtitle = "${selectedThemeColor.displayName} (Tap to change)",
                             trailingContent = {
                                 Box(
@@ -597,15 +650,16 @@ fun SettingsScreen(
                                         .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
                                 )
                             },
-                            onClick = { showThemeColorModal = true }
+                            onClick = { showThemeColorModal = true },
+                            modifier = Modifier.testTag("settings_theme_color_row")
                         )
 
-                        // Categories row: Single option to manage, edit, delete, and set default category
+                        // Categories row: Unified manager for both Expense & Income categories
                         SettingsOptionRow(
                             icon = Icons.Default.Category,
                             iconTint = Color(0xFFF59E0B),
                             title = "Categories",
-                            subtitle = "${categories.size} categories • Default: ${defaultCategory.title}",
+                            subtitle = "${categories.size} expense • ${incomeCategories.size} income",
                             trailingContent = {
                                 Icon(
                                     imageVector = Icons.Default.Add,
@@ -614,7 +668,8 @@ fun SettingsScreen(
                                     modifier = Modifier.size(20.dp)
                                 )
                             },
-                            onClick = { showCategoriesModal = true }
+                            onClick = { showCategoriesModal = true },
+                            modifier = Modifier.testTag("settings_categories_row")
                         )
 
                         // Payment Modes row: Single option to manage, edit, delete, and set default payment mode
@@ -795,8 +850,12 @@ fun SettingsScreen(
         }
     }
 
-    // CATEGORY MANAGEMENT DIALOG (ONLY HERE CAN USERS ADD/REMOVE CATEGORIES)
+    // CATEGORY MANAGEMENT DIALOG (EXPENSE & INCOME CATEGORIES)
     if (showCategoriesModal) {
+        val displayedCategories = if (managingIncomeCategories) incomeCategories else categories
+        val activeDefaultId = if (managingIncomeCategories) defaultIncomeCategoryId else defaultCategoryId
+        val activeAccent = if (managingIncomeCategories) IncomeGreen else ExpenseRed
+
         AlertDialog(
             onDismissRequest = { showCategoriesModal = false },
             title = {
@@ -806,20 +865,20 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Categories",
+                        text = if (managingIncomeCategories) "Income Categories" else "Expense Categories",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                     IconButton(
                         onClick = {
                             newCategoryTitle = ""
-                            newCategoryColorHex = CategoryItem.PALETTE_COLORS[0]
-                            newCategoryIconName = CategoryItem.AVAILABLE_ICONS[0].first
+                            newCategoryColorHex = if (managingIncomeCategories) 0xFF10B981 else CategoryItem.PALETTE_COLORS[0]
+                            newCategoryIconName = if (managingIncomeCategories) "work" else CategoryItem.AVAILABLE_ICONS[0].first
                             showAddCategoryModal = true
                         },
                         modifier = Modifier.testTag("add_category_button")
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = "Add Category", tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Default.Add, contentDescription = "Add Category", tint = activeAccent)
                     }
                 }
             },
@@ -827,19 +886,96 @@ fun SettingsScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 400.dp)
+                        .heightIn(max = 420.dp)
                 ) {
+                    // Expense / Income Segmented Switcher inside Dialog
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .padding(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val expenseTabSelected = !managingIncomeCategories
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(9.dp))
+                                .clickable { managingIncomeCategories = false }
+                                .testTag("manage_cat_tab_expense"),
+                            shape = RoundedCornerShape(9.dp),
+                            color = if (expenseTabSelected) ExpenseRed else Color.Transparent
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ArrowUpward,
+                                    contentDescription = null,
+                                    tint = if (expenseTabSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Expenses (${categories.size})",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (expenseTabSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(9.dp))
+                                .clickable { managingIncomeCategories = true }
+                                .testTag("manage_cat_tab_income"),
+                            shape = RoundedCornerShape(9.dp),
+                            color = if (managingIncomeCategories) IncomeGreen else Color.Transparent
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDownward,
+                                    contentDescription = null,
+                                    tint = if (managingIncomeCategories) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Income (${incomeCategories.size})",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (managingIncomeCategories) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
                     Text(
-                        text = "Add new categories or delete existing ones. Ability to add/remove categories is available only here.",
+                        text = if (managingIncomeCategories) {
+                            "Add, edit, delete, or star a default category for income entries."
+                        } else {
+                            "Add, edit, delete, or star a default category for expense entries."
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 12.dp)
+                        modifier = Modifier.padding(bottom = 10.dp)
                     )
 
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(categories, key = { it.id }) { cat ->
+                        items(displayedCategories, key = { it.id }) { cat ->
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
                                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
@@ -868,7 +1004,7 @@ fun SettingsScreen(
                                                 modifier = Modifier.size(18.dp)
                                             )
                                         }
-                                        val isDefault = cat.id == defaultCategoryId
+                                        val isDefault = cat.id == activeDefaultId
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Column {
                                             Text(
@@ -906,13 +1042,18 @@ fun SettingsScreen(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(2.dp)
                                     ) {
-                                        val isDefault = cat.id == defaultCategoryId
+                                        val isDefault = cat.id == activeDefaultId
 
                                         // Set as default button
                                         IconButton(
                                             onClick = {
-                                                viewModel.setDefaultCategory(cat.id)
-                                                Toast.makeText(context, "'${cat.title}' is now default category", Toast.LENGTH_SHORT).show()
+                                                if (managingIncomeCategories) {
+                                                    viewModel.setDefaultIncomeCategory(cat.id)
+                                                    Toast.makeText(context, "'${cat.title}' is now default income category", Toast.LENGTH_SHORT).show()
+                                                } else {
+                                                    viewModel.setDefaultCategory(cat.id)
+                                                    Toast.makeText(context, "'${cat.title}' is now default category", Toast.LENGTH_SHORT).show()
+                                                }
                                             },
                                             modifier = Modifier
                                                 .size(34.dp)
@@ -947,10 +1088,14 @@ fun SettingsScreen(
                                         }
 
                                         // Delete button (allowed only if more than 1 category exists)
-                                        if (categories.size > 1) {
+                                        if (displayedCategories.size > 1) {
                                             IconButton(
                                                 onClick = {
-                                                    viewModel.deleteCategory(cat.id)
+                                                    if (managingIncomeCategories) {
+                                                        viewModel.deleteIncomeCategory(cat.id)
+                                                    } else {
+                                                        viewModel.deleteCategory(cat.id)
+                                                    }
                                                     Toast.makeText(context, "Deleted '${cat.title}'", Toast.LENGTH_SHORT).show()
                                                 },
                                                 modifier = Modifier
@@ -976,14 +1121,19 @@ fun SettingsScreen(
                 Button(
                     onClick = {
                         newCategoryTitle = ""
-                        newCategoryColorHex = CategoryItem.PALETTE_COLORS[0]
-                        newCategoryIconName = CategoryItem.AVAILABLE_ICONS[0].first
+                        newCategoryColorHex = if (managingIncomeCategories) 0xFF10B981 else CategoryItem.PALETTE_COLORS[0]
+                        newCategoryIconName = if (managingIncomeCategories) "work" else CategoryItem.AVAILABLE_ICONS[0].first
                         showAddCategoryModal = true
-                    }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = activeAccent,
+                        contentColor = Color.White
+                    ),
+                    modifier = Modifier.testTag("open_add_category_modal_button")
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Add Category")
+                    Text(if (managingIncomeCategories) "Add Income" else "Add Expense")
                 }
             },
             dismissButton = {
@@ -996,9 +1146,15 @@ fun SettingsScreen(
 
     // ADD NEW CATEGORY MODAL
     if (showAddCategoryModal) {
+        val addAccent = if (managingIncomeCategories) IncomeGreen else ExpenseRed
         AlertDialog(
             onDismissRequest = { showAddCategoryModal = false },
-            title = { Text("Add Category", fontWeight = FontWeight.Bold) },
+            title = {
+                Text(
+                    text = if (managingIncomeCategories) "Add Income Category" else "Add Expense Category",
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -1008,9 +1164,13 @@ fun SettingsScreen(
                         value = newCategoryTitle,
                         onValueChange = { newCategoryTitle = it },
                         label = { Text("Category Name") },
-                        placeholder = { Text("e.g. Rent, Gym, Books") },
+                        placeholder = {
+                            Text(if (managingIncomeCategories) "e.g. Dividends, Rent Income, Bonus" else "e.g. Rent, Gym, Books")
+                        },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("new_category_name_input")
                     )
 
                     // Choose Icon
@@ -1091,13 +1251,22 @@ fun SettingsScreen(
                     onClick = {
                         val trimmed = newCategoryTitle.trim()
                         if (trimmed.isNotBlank()) {
-                            viewModel.addCategory(trimmed, newCategoryColorHex, newCategoryIconName)
+                            if (managingIncomeCategories) {
+                                viewModel.addIncomeCategory(trimmed, newCategoryColorHex, newCategoryIconName)
+                                Toast.makeText(context, "Income category '$trimmed' added!", Toast.LENGTH_SHORT).show()
+                            } else {
+                                viewModel.addCategory(trimmed, newCategoryColorHex, newCategoryIconName)
+                                Toast.makeText(context, "Category '$trimmed' added!", Toast.LENGTH_SHORT).show()
+                            }
                             showAddCategoryModal = false
-                            Toast.makeText(context, "Category '$trimmed' added!", Toast.LENGTH_SHORT).show()
                         } else {
                             Toast.makeText(context, "Please enter a category name", Toast.LENGTH_SHORT).show()
                         }
                     },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = addAccent,
+                        contentColor = Color.White
+                    ),
                     modifier = Modifier.testTag("save_new_category_button")
                 ) {
                     Text("Save Category")
@@ -1113,9 +1282,15 @@ fun SettingsScreen(
 
     // EDIT CATEGORY MODAL
     editingCategory?.let { catToEdit ->
+        val editAccent = if (catToEdit.isIncome) IncomeGreen else ExpenseRed
         AlertDialog(
             onDismissRequest = { editingCategory = null },
-            title = { Text("Edit Category", fontWeight = FontWeight.Bold) },
+            title = {
+                Text(
+                    text = if (catToEdit.isIncome) "Edit Income Category" else "Edit Expense Category",
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -1125,7 +1300,9 @@ fun SettingsScreen(
                         value = editCategoryTitle,
                         onValueChange = { editCategoryTitle = it },
                         label = { Text("Category Name") },
-                        placeholder = { Text("e.g. Rent, Gym, Books") },
+                        placeholder = {
+                            Text(if (catToEdit.isIncome) "e.g. Dividends, Rent Income, Bonus" else "e.g. Rent, Gym, Books")
+                        },
                         singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1210,13 +1387,21 @@ fun SettingsScreen(
                     onClick = {
                         val trimmed = editCategoryTitle.trim()
                         if (trimmed.isNotBlank()) {
-                            viewModel.editCategory(catToEdit.id, trimmed, editCategoryColorHex, editCategoryIconName)
+                            if (catToEdit.isIncome) {
+                                viewModel.editIncomeCategory(catToEdit.id, trimmed, editCategoryColorHex, editCategoryIconName)
+                            } else {
+                                viewModel.editCategory(catToEdit.id, trimmed, editCategoryColorHex, editCategoryIconName)
+                            }
                             editingCategory = null
                             Toast.makeText(context, "Category '$trimmed' updated!", Toast.LENGTH_SHORT).show()
                         } else {
                             Toast.makeText(context, "Please enter a category name", Toast.LENGTH_SHORT).show()
                         }
                     },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = editAccent,
+                        contentColor = Color.White
+                    ),
                     modifier = Modifier.testTag("save_edit_category_button")
                 ) {
                     Text("Save Changes")
@@ -1230,11 +1415,128 @@ fun SettingsScreen(
         )
     }
 
-    // Theme Color Picker Dialog
+    // App Theme Mode Picker Dialog (Light, Dark, Black, System Default)
+    if (showThemeModeModal) {
+        AlertDialog(
+            onDismissRequest = { showThemeModeModal = false },
+            title = {
+                Text(
+                    text = "Choose App Theme",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("theme_mode_dialog")
+                ) {
+                    AppThemeMode.entries.forEach { modeOption ->
+                        val isSelected = selectedThemeMode == modeOption
+                        val optionIcon = when (modeOption) {
+                            AppThemeMode.LIGHT -> Icons.Default.LightMode
+                            AppThemeMode.DARK -> Icons.Default.DarkMode
+                            AppThemeMode.BLACK -> Icons.Default.Contrast
+                            AppThemeMode.SYSTEM -> Icons.Default.SettingsBrightness
+                        }
+                        val swatchBg = when (modeOption) {
+                            AppThemeMode.LIGHT -> Color(0xFFF8FAFC)
+                            AppThemeMode.DARK -> Color(0xFF0F172A)
+                            AppThemeMode.BLACK -> Color(0xFF000000)
+                            AppThemeMode.SYSTEM -> MaterialTheme.colorScheme.surfaceVariant
+                        }
+                        val swatchIconTint = when (modeOption) {
+                            AppThemeMode.LIGHT -> Color(0xFFD97706)
+                            AppThemeMode.DARK -> Color(0xFF93C5FD)
+                            AppThemeMode.BLACK -> Color(0xFFF8FAFC)
+                            AppThemeMode.SYSTEM -> MaterialTheme.colorScheme.primary
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            border = if (isSelected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable {
+                                    viewModel.setThemeMode(modeOption)
+                                    showThemeModeModal = false
+                                }
+                                .testTag("theme_mode_option_${modeOption.id}")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .clip(CircleShape)
+                                            .background(swatchBg)
+                                            .border(
+                                                width = 1.5.dp,
+                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                                shape = CircleShape
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = optionIcon,
+                                            contentDescription = modeOption.displayName,
+                                            tint = swatchIconTint,
+                                            modifier = Modifier.size(19.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = modeOption.displayName,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = modeOption.description,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showThemeModeModal = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
+    // Accent Color Picker Dialog
     if (showThemeColorModal) {
         AlertDialog(
             onDismissRequest = { showThemeColorModal = false },
-            title = { Text("Choose Theme Color") },
+            title = { Text("Choose Accent Color") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     AppThemeColor.entries.forEach { themeColorOption ->

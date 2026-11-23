@@ -107,6 +107,7 @@ fun ExpenseScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val defaultCategoryId by viewModel.defaultCategoryId.collectAsStateWithLifecycle()
+    val defaultIncomeCategoryId by viewModel.defaultIncomeCategoryId.collectAsStateWithLifecycle()
     val promptBackupOnOpen by viewModel.promptBackupOnOpen.collectAsStateWithLifecycle()
     val isLocalFolderConfigured by viewModel.isLocalFolderConfigured.collectAsStateWithLifecycle()
     val localBackupFolderName by viewModel.localBackupFolderName.collectAsStateWithLifecycle()
@@ -443,16 +444,21 @@ fun ExpenseScreen(
     if (uiState.isAddEditSheetOpen) {
         val resolvedDefaultCat = uiState.categories.firstOrNull { it.id == defaultCategoryId }
             ?: CategoryRegistry.getCategory(context, defaultCategoryId)
+        val resolvedDefaultIncomeCat = uiState.incomeCategories.firstOrNull { it.id == defaultIncomeCategoryId }
+            ?: CategoryRegistry.getCategory(context, defaultIncomeCategoryId)
 
         AddEditExpenseSheet(
             sheetState = sheetState,
             initialExpense = uiState.editingExpense,
             initialIsIncome = uiState.isAddingIncome,
             defaultCategory = resolvedDefaultCat,
+            defaultIncomeCategory = resolvedDefaultIncomeCat,
             currency = uiState.currency,
             paymentModes = uiState.paymentModes,
             categories = uiState.categories,
+            incomeCategories = uiState.incomeCategories,
             onSetDefaultCategory = { viewModel.setDefaultCategory(it) },
+            onSetDefaultIncomeCategory = { viewModel.setDefaultIncomeCategory(it) },
             onDismiss = { viewModel.closeSheet() },
             onSave = { amount, dateString, paymentMode, category, note, isIncome ->
                 viewModel.saveExpense(amount, dateString, paymentMode, category, note, isIncome)

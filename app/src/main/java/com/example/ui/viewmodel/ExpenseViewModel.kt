@@ -15,6 +15,7 @@ import com.example.data.model.PaymentModeRegistry
 import com.example.data.repository.ExpenseRepository
 import com.example.ui.theme.AppCurrency
 import com.example.ui.theme.AppThemeColor
+import com.example.ui.theme.AppThemeMode
 import com.example.util.AppDateFormat
 import com.example.util.BackupUtils
 import com.example.util.DateUtils
@@ -114,7 +115,8 @@ private data class CombinedPrefs(
     val currency: AppCurrency,
     val dateFormat: AppDateFormat,
     val paymentModes: List<PaymentMode>,
-    val categories: List<CategoryItem>
+    val categories: List<CategoryItem>,
+    val incomeCategories: List<CategoryItem>
 )
 
 data class ExpenseUiState(
@@ -140,7 +142,8 @@ data class ExpenseUiState(
     val currency: AppCurrency = AppCurrency.DEFAULT,
     val dateFormat: AppDateFormat = AppDateFormat.DEFAULT,
     val paymentModes: List<PaymentMode> = emptyList(),
-    val categories: List<CategoryItem> = emptyList()
+    val categories: List<CategoryItem> = emptyList(),
+    val incomeCategories: List<CategoryItem> = emptyList()
 )
 
 class ExpenseViewModel(application: Application) : AndroidViewModel(application) {
@@ -153,10 +156,20 @@ class ExpenseViewModel(application: Application) : AndroidViewModel(application)
     )
     val selectedThemeColor: StateFlow<AppThemeColor> = _selectedThemeColor.asStateFlow()
 
+    private val _selectedThemeMode = MutableStateFlow(
+        AppThemeMode.fromId(prefs.getString("theme_mode_id", AppThemeMode.DEFAULT.id))
+    )
+    val selectedThemeMode: StateFlow<AppThemeMode> = _selectedThemeMode.asStateFlow()
+
     private val _defaultCategoryId = MutableStateFlow(
         prefs.getString("default_category_id", ExpenseCategory.FOOD.id) ?: ExpenseCategory.FOOD.id
     )
     val defaultCategoryId: StateFlow<String> = _defaultCategoryId.asStateFlow()
+
+    private val _defaultIncomeCategoryId = MutableStateFlow(
+        prefs.getString("default_income_category_id", CategoryItem.INCOME_DEFAULT.id) ?: CategoryItem.INCOME_DEFAULT.id
+    )
+    val defaultIncomeCategoryId: StateFlow<String> = _defaultIncomeCategoryId.asStateFlow()
 
     private val _lastBackupTime = MutableStateFlow(prefs.getString("last_backup_time", null))
     val lastBackupTime: StateFlow<String?> = _lastBackupTime.asStateFlow()
@@ -188,6 +201,9 @@ class ExpenseViewModel(application: Application) : AndroidViewModel(application)
 
     private val _categories = MutableStateFlow(CategoryRegistry.getAllCategories(application))
     val categories: StateFlow<List<CategoryItem>> = _categories.asStateFlow()
+
+    private val _incomeCategories = MutableStateFlow(CategoryRegistry.getAllIncomeCategories(application))
+    val incomeCategories: StateFlow<List<CategoryItem>> = _incomeCategories.asStateFlow()
 
     private val _localBackupFolderName = MutableStateFlow(LocalBackupHelper.getFolderName(application))
     val localBackupFolderName: StateFlow<String> = _localBackupFolderName.asStateFlow()
@@ -287,9 +303,19 @@ class ExpenseViewModel(application: Application) : AndroidViewModel(application)
         prefs.edit().putString("theme_color_id", themeColor.id).apply()
     }
 
+    fun setThemeMode(themeMode: AppThemeMode) {
+        _selectedThemeMode.value = themeMode
+        prefs.edit().putString("theme_mode_id", themeMode.id).apply()
+    }
+
     fun setDefaultCategory(categoryId: String) {
         _defaultCategoryId.value = categoryId
         prefs.edit().putString("default_category_id", categoryId).apply()
+    }
+
+    fun setDefaultIncomeCategory(categoryId: String) {
+        _defaultIncomeCategoryId.value = categoryId
+        prefs.edit().putString("default_income_category_id", categoryId).apply()
     }
 
     private val _filterParams = combine(
@@ -306,8 +332,9 @@ class ExpenseViewModel(application: Application) : AndroidViewModel(application)
         repository.allExpenses,
         _filterParams,
         _statsTimeRange,
-        _categories
-    ) { allExpenses: List<Expense>, fp: FilterParams, timeRange: StatsTimeRange, currentCategories: List<CategoryItem> ->
+        _categories,
+        _incomeCategories
+    ) { allExpenses: List<Expense>, fp: FilterParams, timeRange: StatsTimeRange, currentCategories: List<CategoryItem>, currentIncomeCategories: List<CategoryItem> ->
         val onlyExpenses = allExpenses.filter { !it.isIncome }
         val onlyIncomes = allExpenses.filter { it.isIncome }
 
@@ -333,7 +360,7 @@ class ExpenseViewModel(application: Application) : AndroidViewModel(application)
                     ExpenseFilter.CASH -> expense.paymentMode.name == "CASH"
                 }
             }
-            val resolvedCat = CategoryRegistry.resolveCategory(expense.category, currentCategories)
+            val resolvedCat = CategoryRegistry.resolveCategory(expense.category, currentCategories, currentIncomeCategories)
             val matchesCategory = fp.catFilter == null ||
                     expense.category.equals(fp.catFilter, ignoreCase = true) ||
                     resolvedCat.id.equals(fp.catFilter, ignoreCase = true) ||
@@ -432,12 +459,16 @@ class ExpenseViewModel(application: Application) : AndroidViewModel(application)
         SheetStateParams(isOpen, editing, isIncome)
     }
 
+    private val _allCategoryLists = combine(_categories, _incomeCategories) { cats, incCats ->
+        cats to incCats
+    }
+
     val uiState: StateFlow<ExpenseUiState> = combine(
         _calculatedData,
         _statsTimeRange,
         _sheetState,
-        combine(_lastDeletedExpense, _selectedCurrency, _selectedDateFormat, _paymentModes, _categories) { deleted, curr, df, modes, cats ->
-            CombinedPrefs(deleted, curr, df, modes, cats)
+        combine(_lastDeletedExpense, _selectedCurrency, _selectedDateFormat, _paymentModes, _allCategoryLists) { deleted, curr, df, modes, catPair ->
+            CombinedPrefs(deleted, curr, df, modes, catPair.first, catPair.second)
         }
     ) { data, timeRange, sheet, prefs ->
         ExpenseUiState(
@@ -463,7 +494,8 @@ class ExpenseViewModel(application: Application) : AndroidViewModel(application)
             currency = prefs.currency,
             dateFormat = prefs.dateFormat,
             paymentModes = prefs.paymentModes,
-            categories = prefs.categories
+            categories = prefs.categories,
+            incomeCategories = prefs.incomeCategories
         )
     }.stateIn(
         scope = viewModelScope,
@@ -688,6 +720,25 @@ class ExpenseViewModel(application: Application) : AndroidViewModel(application)
         if (_defaultCategoryId.value == id) {
             val first = _categories.value.firstOrNull()?.id ?: ExpenseCategory.OTHER.id
             setDefaultCategory(first)
+        }
+    }
+
+    fun addIncomeCategory(title: String, colorHex: Long, iconName: String) {
+        CategoryRegistry.addIncomeCategory(getApplication(), title, colorHex, iconName)
+        _incomeCategories.value = CategoryRegistry.getAllIncomeCategories(getApplication())
+    }
+
+    fun editIncomeCategory(id: String, title: String, colorHex: Long, iconName: String) {
+        CategoryRegistry.updateIncomeCategory(getApplication(), id, title, colorHex, iconName)
+        _incomeCategories.value = CategoryRegistry.getAllIncomeCategories(getApplication())
+    }
+
+    fun deleteIncomeCategory(id: String) {
+        CategoryRegistry.deleteIncomeCategory(getApplication(), id)
+        _incomeCategories.value = CategoryRegistry.getAllIncomeCategories(getApplication())
+        if (_defaultIncomeCategoryId.value == id) {
+            val first = _incomeCategories.value.firstOrNull()?.id ?: CategoryItem.INCOME_DEFAULT.id
+            setDefaultIncomeCategory(first)
         }
     }
 

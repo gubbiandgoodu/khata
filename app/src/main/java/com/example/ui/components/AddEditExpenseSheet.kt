@@ -91,10 +91,13 @@ fun AddEditExpenseSheet(
     initialExpense: Expense?,
     initialIsIncome: Boolean = false,
     defaultCategory: ExpenseCategory = ExpenseCategory.FOOD,
+    defaultIncomeCategory: ExpenseCategory = CategoryItem.INCOME_DEFAULT,
     currency: AppCurrency = AppCurrency.DEFAULT,
     paymentModes: List<PaymentMode> = emptyList(),
     categories: List<CategoryItem> = emptyList(),
+    incomeCategories: List<CategoryItem> = emptyList(),
     onSetDefaultCategory: ((String) -> Unit)? = null,
+    onSetDefaultIncomeCategory: ((String) -> Unit)? = null,
     onDismiss: () -> Unit,
     onSave: (amount: Double, dateString: String, paymentMode: PaymentMode, category: String, note: String, isIncome: Boolean) -> Unit,
     modifier: Modifier = Modifier
@@ -113,8 +116,10 @@ fun AddEditExpenseSheet(
     val expenseCategories = remember(categories) {
         if (categories.isNotEmpty()) categories else CategoryRegistry.getAllCategories(context)
     }
-    val incomeCategories = remember { CategoryItem.INCOME_CATEGORIES }
-    val activeCategories = if (isIncome) incomeCategories else expenseCategories
+    val effectiveIncomeCategories = remember(incomeCategories) {
+        if (incomeCategories.isNotEmpty()) incomeCategories else CategoryRegistry.getAllIncomeCategories(context)
+    }
+    val activeCategories = if (isIncome) effectiveIncomeCategories else expenseCategories
     val accentColor = if (isIncome) IncomeGreen else ExpenseRed
 
     var amountText by remember(initialExpense) {
@@ -138,12 +143,12 @@ fun AddEditExpenseSheet(
         )
     }
 
-    var selectedCategory by remember(initialExpense, defaultCategory, expenseCategories, initialIsIncome) {
+    var selectedCategory by remember(initialExpense, defaultCategory, defaultIncomeCategory, expenseCategories, effectiveIncomeCategories, initialIsIncome) {
         mutableStateOf(
             if (initialExpense != null) {
-                CategoryRegistry.resolveCategory(initialExpense.category, expenseCategories)
+                CategoryRegistry.resolveCategory(initialExpense.category, expenseCategories, effectiveIncomeCategories)
             } else if (initialIsIncome) {
-                CategoryItem.INCOME_DEFAULT
+                defaultIncomeCategory
             } else {
                 defaultCategory
             }
@@ -244,7 +249,7 @@ fun AddEditExpenseSheet(
                         .clickable {
                             if (isIncome) {
                                 isIncome = false
-                                if (selectedCategory.id.startsWith("inc_")) {
+                                if (expenseCategories.none { it.id == selectedCategory.id }) {
                                     selectedCategory = defaultCategory
                                 }
                             }
@@ -281,8 +286,8 @@ fun AddEditExpenseSheet(
                         .clickable {
                             if (!isIncome) {
                                 isIncome = true
-                                if (!selectedCategory.id.startsWith("inc_")) {
-                                    selectedCategory = CategoryItem.INCOME_DEFAULT
+                                if (effectiveIncomeCategories.none { it.id == selectedCategory.id }) {
+                                    selectedCategory = defaultIncomeCategory
                                 }
                             }
                         }
@@ -538,13 +543,15 @@ fun AddEditExpenseSheet(
                     letterSpacing = 1.sp
                 )
 
-                // Option to set this category as default (for expenses)
-                if (!isIncome && onSetDefaultCategory != null) {
-                    val isCurrentDefault = selectedCategory == defaultCategory
+                // Option to set this category as default (for expenses or income)
+                val setDefaultCallback = if (isIncome) onSetDefaultIncomeCategory else onSetDefaultCategory
+                val currentDefaultForType = if (isIncome) defaultIncomeCategory else defaultCategory
+                if (setDefaultCallback != null) {
+                    val isCurrentDefault = selectedCategory.id == currentDefaultForType.id
                     Row(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .clickable { onSetDefaultCategory(selectedCategory.id) }
+                            .clickable { setDefaultCallback(selectedCategory.id) }
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                             .testTag("set_default_category_chip"),
                         verticalAlignment = Alignment.CenterVertically

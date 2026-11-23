@@ -461,6 +461,7 @@ fun TransactionsScreen(
                     Box(modifier = Modifier.weight(1f)) {
                         val selectedCat = uiState.selectedCategoryFilter?.let { catId ->
                             uiState.categories.firstOrNull { it.id.equals(catId, ignoreCase = true) }
+                                ?: uiState.incomeCategories.firstOrNull { it.id.equals(catId, ignoreCase = true) }
                                 ?: CategoryRegistry.getCategory(context, catId)
                         }
                         val catLabel = selectedCat?.title ?: "All Categories"
@@ -537,20 +538,23 @@ fun TransactionsScreen(
                                 },
                                 modifier = Modifier.testTag("cat_menu_item_all")
                             )
-                            val context = androidx.compose.ui.platform.LocalContext.current
                             val expenseCats = if (uiState.categories.isNotEmpty()) uiState.categories else CategoryRegistry.getAllCategories(context)
+                            val incomeCats = if (uiState.incomeCategories.isNotEmpty()) uiState.incomeCategories else CategoryRegistry.getAllIncomeCategories(context)
                             val displayCategories = when (uiState.selectedTypeFilter) {
-                                TransactionTypeFilter.INCOME -> CategoryItem.INCOME_CATEGORIES
+                                TransactionTypeFilter.INCOME -> incomeCats
                                 TransactionTypeFilter.EXPENSE -> expenseCats
-                                TransactionTypeFilter.ALL -> expenseCats + CategoryItem.INCOME_CATEGORIES.filter { incCat ->
-                                    uiState.expenses.any { it.category.equals(incCat.id, ignoreCase = true) }
+                                TransactionTypeFilter.ALL -> expenseCats + incomeCats.filter { incCat ->
+                                    uiState.expenses.any {
+                                        it.category.equals(incCat.id, ignoreCase = true) ||
+                                                it.category.equals(incCat.title, ignoreCase = true)
+                                    }
                                 }
                             }
                             displayCategories.forEach { cat ->
                                 val count = uiState.expenses.count { exp ->
                                     exp.category.equals(cat.id, ignoreCase = true) ||
                                             exp.category.equals(cat.title, ignoreCase = true) ||
-                                            CategoryRegistry.resolveCategory(exp.category, expenseCats).id.equals(cat.id, ignoreCase = true)
+                                            CategoryRegistry.resolveCategory(exp.category, expenseCats, incomeCats).id.equals(cat.id, ignoreCase = true)
                                 }
                                 DropdownMenuItem(
                                     text = { Text("${cat.title} ($count)") },

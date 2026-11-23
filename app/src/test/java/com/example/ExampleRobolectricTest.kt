@@ -285,4 +285,48 @@ class ExampleRobolectricTest {
         val allTime = DateUtils.filterExpensesByTimeRange(testExpenses, com.example.ui.viewmodel.StatsTimeRange.ALL_TIME)
         assertEquals(2, allTime.size)
     }
+
+    @Test
+    fun `income category management adds edits resolves and deletes categories`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val initialIncomeCats = com.example.data.model.CategoryRegistry.getAllIncomeCategories(context)
+        val initialCount = initialIncomeCats.size
+        assertTrue(initialCount >= 7)
+
+        val added = com.example.data.model.CategoryRegistry.addIncomeCategory(
+            context = context,
+            title = "Dividends",
+            colorHex = 0xFF10B981,
+            iconName = "trending_up"
+        )
+        assertEquals("Dividends", added.title)
+        assertTrue(added.isCustom)
+        assertTrue(added.isIncome)
+
+        assertEquals("Dividends", com.example.data.model.CategoryRegistry.getCategory(context, added.id).title)
+
+        com.example.data.model.CategoryRegistry.updateIncomeCategory(
+            context = context,
+            id = added.id,
+            newTitle = "Stock Dividends",
+            newColorHex = 0xFF0D9488,
+            newIconName = "savings"
+        )
+        assertEquals("Stock Dividends", com.example.data.model.CategoryRegistry.getCategory(context, added.id).title)
+
+        com.example.data.model.CategoryRegistry.deleteIncomeCategory(context, added.id)
+        val afterDelete = com.example.data.model.CategoryRegistry.getAllIncomeCategories(context)
+        assertEquals(initialCount, afterDelete.size)
+    }
+
+    @Test
+    fun `theme mode options support light dark black and system default`() {
+        assertEquals(com.example.ui.theme.AppThemeMode.SYSTEM, com.example.ui.theme.AppThemeMode.DEFAULT)
+        assertEquals(4, com.example.ui.theme.AppThemeMode.entries.size)
+        assertEquals(com.example.ui.theme.AppThemeMode.LIGHT, com.example.ui.theme.AppThemeMode.fromId("light"))
+        assertEquals(com.example.ui.theme.AppThemeMode.DARK, com.example.ui.theme.AppThemeMode.fromId("dark"))
+        assertEquals(com.example.ui.theme.AppThemeMode.BLACK, com.example.ui.theme.AppThemeMode.fromId("black"))
+        assertEquals(com.example.ui.theme.AppThemeMode.SYSTEM, com.example.ui.theme.AppThemeMode.fromId("system"))
+        assertEquals(com.example.ui.theme.AppThemeMode.SYSTEM, com.example.ui.theme.AppThemeMode.fromId("invalid"))
+    }
 }

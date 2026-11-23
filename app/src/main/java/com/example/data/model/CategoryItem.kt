@@ -31,7 +31,8 @@ data class CategoryItem(
     val title: String,
     val colorHex: Long,
     val iconName: String = "other",
-    val isCustom: Boolean = false
+    val isCustom: Boolean = false,
+    val isIncome: Boolean = false
 ) {
     val color: Color get() = Color(colorHex)
     val icon: ImageVector get() = getIcon(iconName)
@@ -93,13 +94,13 @@ data class CategoryItem(
         )
 
         val INCOME_CATEGORIES = listOf(
-            CategoryItem("inc_salary", "Salary", 0xFF16A34A, "work", isCustom = false),
-            CategoryItem("inc_business", "Business", 0xFF059669, "trending_up", isCustom = false),
-            CategoryItem("inc_freelance", "Freelance", 0xFF10B981, "account_balance_wallet", isCustom = false),
-            CategoryItem("inc_investment", "Investment", 0xFF0D9488, "savings", isCustom = false),
-            CategoryItem("inc_gift", "Gift & Bonus", 0xFF22C55E, "card_giftcard", isCustom = false),
-            CategoryItem("inc_refund", "Refund", 0xFF15803D, "payments", isCustom = false),
-            CategoryItem("inc_other", "Other Income", 0xFF16A34A, "attach_money", isCustom = false)
+            CategoryItem("inc_salary", "Salary", 0xFF16A34A, "work", isCustom = false, isIncome = true),
+            CategoryItem("inc_business", "Business", 0xFF059669, "trending_up", isCustom = false, isIncome = true),
+            CategoryItem("inc_freelance", "Freelance", 0xFF10B981, "account_balance_wallet", isCustom = false, isIncome = true),
+            CategoryItem("inc_investment", "Investment", 0xFF0D9488, "savings", isCustom = false, isIncome = true),
+            CategoryItem("inc_gift", "Gift & Bonus", 0xFF22C55E, "card_giftcard", isCustom = false, isIncome = true),
+            CategoryItem("inc_refund", "Refund", 0xFF15803D, "payments", isCustom = false, isIncome = true),
+            CategoryItem("inc_other", "Other Income", 0xFF16A34A, "attach_money", isCustom = false, isIncome = true)
         )
 
         val INCOME_DEFAULT: CategoryItem get() = INCOME_CATEGORIES[0]
